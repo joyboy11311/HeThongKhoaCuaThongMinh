@@ -110,7 +110,14 @@ void loop() {
             if (inputPassword == password) {
               noTone(BUZZER_PIN);
               lockout = false;
+
+              // Nhấp nháy LED xanh khi nhập đúng
+              for (int i = 0; i < 6; i++) {
+                digitalWrite(LED_GREEN_PIN, i % 2 == 0 ? LOW : HIGH);
+                delay(150);
+              }
               setLedColor("green");
+
               lcd.clear();
               lcd.print("Access granted!");
               delay(2000);
@@ -128,7 +135,7 @@ void loop() {
                 lcd.print("ALARM!");
                 tone(BUZZER_PIN, 1000);
                 lockout = true;
-                setLedColor("off"); // Tắt LED xanh, đèn đỏ nhấp nháy riêng
+                setLedColor("off");
               }
 
               delay(2000);
