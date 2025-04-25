@@ -15,10 +15,10 @@ LiquidCrystal_I2C lcd(0x27, 16, 2);
 const byte ROWS = 4;
 const byte COLS = 4;
 char keys[ROWS][COLS] = {
-  {'1','2','3','*'},
-  {'4','5','6','#'},
-  {'7','8','9','A'},
-  {'B','0','C','D'}
+  {'1','2','3','A'},
+  {'4','5','6','B'},
+  {'7','8','9','C'},
+  {'*','0','#','D'}
 };
 byte rowPins[ROWS] = {14, 27, 26, 25};
 byte colPins[COLS] = {33, 32, 4, 2};
@@ -35,6 +35,7 @@ int attempts = 0;
 bool lockout = false;
 unsigned long lastBlinkTime = 0;
 bool redLedState = false;
+bool authenticated = false; // ✅ Thêm biến toàn cục
 
 void setup() {
   Serial.begin(9600);
@@ -84,110 +85,108 @@ void loop() {
   char key = keypad.getKey();
   if (key) {
     switch (state) {
-      case LOGIN:
-        if (key == '*') {
-          lcd.clear();
-          lcd.print("Change password?");
+  case LOGIN:
+  if (key == '#') {
+    if (inputPassword.length() > 0) {
+      inputPassword.remove(inputPassword.length() - 1);
+      lcd.setCursor(0, 1);
+      lcd.print("                ");
+      lcd.setCursor(0, 1);
+      for (int i = 0; i < inputPassword.length(); i++) lcd.print("*");
+    }
+  }
+  else if (key >= '0' && key <= '9') {
+    inputPassword += key;
+    lcd.setCursor(0, 1);
+    for (int i = 0; i < inputPassword.length(); i++) lcd.print("*");
+
+    if (inputPassword.length() == password.length()) {
+      if (inputPassword == password) {
+        authenticated = true;
+        noTone(BUZZER_PIN);
+        lockout = false;
+
+        for (int i = 0; i < 6; i++) {
+          digitalWrite(LED_GREEN_PIN, i % 2 == 0 ? LOW : HIGH);
+          delay(150);
+        }
+        setLedColor("green");
+
+        lcd.clear();
+        lcd.print("Access granted!");
+        delay(2000);
+        lcd.clear();
+        lcd.print("*: Change pass");
+        lcd.setCursor(0,1);
+        lcd.print("#: Continue");
+        state = CONFIRM_CHANGE;
+        inputPassword = "";
+        attempts = 0;
+      } else {
+        attempts++;
+        lcd.clear();
+        lcd.print("Wrong password");
+
+        if (attempts >= 5) {
           lcd.setCursor(0, 1);
-          lcd.print("*:Yes  #:No");
-          state = CONFIRM_CHANGE;
-        } 
-        else if (key == '#') {
-          if (inputPassword.length() > 0) {
-            inputPassword.remove(inputPassword.length() - 1);
-            lcd.setCursor(0, 1);
-            lcd.print("                ");
-            lcd.setCursor(0, 1);
-            for (int i = 0; i < inputPassword.length(); i++) lcd.print("*");
-          }
+          lcd.print("ALARM!");
+          tone(BUZZER_PIN, 1000);
+          lockout = true;
+          setLedColor("off");
         }
-        else if (key >= '0' && key <= '9') {
-          inputPassword += key;
-          lcd.setCursor(0, 1);
-          for (int i = 0; i < inputPassword.length(); i++) lcd.print("*");
 
-          if (inputPassword.length() == password.length()) {
-            if (inputPassword == password) {
-              noTone(BUZZER_PIN);
-              lockout = false;
+        delay(2000);
+        lcd.clear();
+        lcd.print("Enter password:");
+        inputPassword = "";
+      }
+    }
+  }
+  break;
 
-              // Nhấp nháy LED xanh khi nhập đúng
-              for (int i = 0; i < 6; i++) {
-                digitalWrite(LED_GREEN_PIN, i % 2 == 0 ? LOW : HIGH);
-                delay(150);
-              }
-              setLedColor("green");
 
-              lcd.clear();
-              lcd.print("Access granted!");
-              delay(2000);
-              lcd.clear();
-              lcd.print("Enter password:");
-              inputPassword = "";
-              attempts = 0;
-            } else {
-              attempts++;
-              lcd.clear();
-              lcd.print("Wrong password");
+  case CONFIRM_CHANGE:
+    if (key == '*') {
+      inputPassword = "";
+      lcd.clear();
+      lcd.print("New password:");
+      state = CHANGE_PASS;
+    } else if (key == '#') {
+      lcd.clear();
+      lcd.print("Enter password:");
+      inputPassword = "";
+      state = LOGIN;
+    }
+    break;
 
-              if (attempts >= 5) {
-                lcd.setCursor(0, 1);
-                lcd.print("ALARM!");
-                tone(BUZZER_PIN, 1000);
-                lockout = true;
-                setLedColor("off");
-              }
+  case CHANGE_PASS:
+    if (key == '#') {
+      if (inputPassword.length() > 0) {
+        inputPassword.remove(inputPassword.length() - 1);
+        lcd.setCursor(0, 1);
+        lcd.print("                ");
+        lcd.setCursor(0, 1);
+        for (int i = 0; i < inputPassword.length(); i++) lcd.print("*");
+      }
+    }
+    else if (key >= '0' && key <= '9') {
+      inputPassword += key;
+      lcd.setCursor(0, 1);
+      for (int i = 0; i < inputPassword.length(); i++) lcd.print("*");
 
-              delay(2000);
-              lcd.clear();
-              lcd.print("Enter password:");
-              inputPassword = "";
-            }
-          }
-        }
-        break;
-
-      case CONFIRM_CHANGE:
-        if (key == '*') {
-          inputPassword = "";
-          lcd.clear();
-          lcd.print("New password:");
-          state = CHANGE_PASS;
-        } else if (key == '#') {
-          lcd.clear();
-          lcd.print("Enter password:");
-          inputPassword = "";
-          state = LOGIN;
-        }
-        break;
-
-      case CHANGE_PASS:
-        if (key == '#') {
-          if (inputPassword.length() > 0) {
-            inputPassword.remove(inputPassword.length() - 1);
-            lcd.setCursor(0, 1);
-            lcd.print("                ");
-            lcd.setCursor(0, 1);
-            for (int i = 0; i < inputPassword.length(); i++) lcd.print("*");
-          }
-        }
-        else if (key >= '0' && key <= '9') {
-          inputPassword += key;
-          lcd.setCursor(0, 1);
-          for (int i = 0; i < inputPassword.length(); i++) lcd.print("*");
-
-          if (inputPassword.length() >= 4) {
-            password = inputPassword;
-            lcd.clear();
-            lcd.print("Pass changed!");
-            delay(2000);
-            lcd.clear();
-            lcd.print("Enter password:");
-            inputPassword = "";
-            state = LOGIN;
-          }
-        }
-        break;
+      if (inputPassword.length() >= 4) {
+        password = inputPassword;
+        lcd.clear();
+        lcd.print("Pass changed!");
+        delay(2000);
+        lcd.clear();
+        lcd.print("Enter password:");
+        inputPassword = "";
+        state = LOGIN;
+        authenticated = false; // ✅ Reset sau khi đổi
+      }
+    }
+    break;
     }
   }
 }
