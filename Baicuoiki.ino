@@ -1,16 +1,18 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <Keypad.h>
+#include <Servo.h>
 
 // Cấu hình chân
-#define BUZZER_PIN     PE10      // Cập nhật chân buzzer
+#define BUZZER_PIN     PE10
 #define IR_SENSOR_PIN  PE12
+#define IR_DOOR_SENSOR_PIN  D4  // Cảm biến đặt ở cửa
 
 #define LED_RED_PIN    D3
 #define LED_GREEN_PIN  D2
 
-// Prototype
-void setLedColor(String color);
+#define SERVO_PIN D5
+Servo doorServo;
 
 // LCD
 LiquidCrystal_I2C lcd(0x27, 16, 2);
@@ -40,12 +42,18 @@ bool lockout = false;
 unsigned long lastBlinkTime = 0;
 bool redLedState = false;
 bool authenticated = false;
+bool doorOpened = false;
+unsigned long lastClearTime = 0;
+const unsigned long AUTO_CLOSE_DELAY = 5000; // 5 giây
+
+void setLedColor(String color);
+void handleAutoClose();
 
 // Setup
 void setup() {
-  Serial.begin(9600);  
+  Serial.begin(9600);
 
-  Wire.begin();          // SDA = PB9, SCL = PB8 (trên Nucleo-F429ZI)
+  Wire.begin();  // SDA = PB9, SCL = PB8
   lcd.init();
   lcd.backlight();
 
@@ -53,9 +61,13 @@ void setup() {
   pinMode(BUZZER_PIN, OUTPUT);
   pinMode(LED_RED_PIN, OUTPUT);
   pinMode(LED_GREEN_PIN, OUTPUT);
+  pinMode(IR_DOOR_SENSOR_PIN, INPUT);
 
   setLedColor("red");
   lcd.print("Waiting...");
+
+  doorServo.attach(SERVO_PIN);
+  doorServo.write(0);  // Đóng cửa ban đầu
 }
 
 // Loop
@@ -86,7 +98,10 @@ void loop() {
     digitalWrite(LED_GREEN_PIN, HIGH);
   }
 
-  if (!lcdOn) return;
+  if (!lcdOn) {
+    handleAutoClose();  // vẫn kiểm tra đóng cửa
+    return;
+  }
 
   char key = keypad.getKey();
   if (key) {
@@ -110,6 +125,14 @@ void loop() {
               authenticated = true;
               noTone(BUZZER_PIN);
               lockout = false;
+
+              doorServo.write(90);    // Mở cửa
+              doorOpened = true;
+              lastClearTime = 0;
+              lcd.clear();
+              lcd.print("WELCOME! TKHOME");
+              delay(2000);            // Hiển thị trong 2 giây
+
 
               for (int i = 0; i < 6; i++) {
                 digitalWrite(LED_GREEN_PIN, i % 2 == 0 ? LOW : HIGH);
@@ -192,6 +215,8 @@ void loop() {
         break;
     }
   }
+
+  handleAutoClose();
 }
 
 // Điều khiển LED RGB dương chung
@@ -205,5 +230,30 @@ void setLedColor(String color) {
   } else if (color == "off") {
     digitalWrite(LED_RED_PIN, HIGH);
     digitalWrite(LED_GREEN_PIN, HIGH);
+  }
+}
+
+// Tự động đóng cửa sau khi không có người
+void handleAutoClose() {
+  if (doorOpened) {
+    bool objectAtDoor = digitalRead(IR_DOOR_SENSOR_PIN) == LOW;
+
+    if (!objectAtDoor && lastClearTime == 0) {
+      lastClearTime = millis();
+    }
+
+    if (objectAtDoor) {
+      lastClearTime = 0;
+    }
+
+    if (lastClearTime > 0 && millis() - lastClearTime >= AUTO_CLOSE_DELAY) {
+      doorServo.write(0);     // Đóng cửa
+      doorOpened = false;
+      lastClearTime = 0;
+      lcd.clear();
+      lcd.print("Door is CLOSED");
+      delay(2000);
+      Serial.println("Door closed automatically");
+    }
   }
 }
